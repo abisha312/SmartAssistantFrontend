@@ -1,73 +1,57 @@
-const sendBtn = document.getElementById("send-btn");
-const voiceBtn = document.getElementById("voice-btn");
-const userInput = document.getElementById("user-input");
 const chatBox = document.getElementById("chat-box");
+const micBtn = document.getElementById("mic-btn");
 
-const API_URL = "https://<your-render-backend-url>/api/ask"; // Replace with your Flask backend URL
+const speak = (text) => {
+    let speech = new SpeechSynthesisUtterance();
+    speech.lang = "en-US";
+    speech.text = text;
+    speech.volume = 1;
+    speech.rate = 1;
+    speech.pitch = 1;
+    window.speechSynthesis.speak(speech);
+};
 
-// Add message to chat box
-function addMessage(content, sender) {
-  const msg = document.createElement("div");
-  msg.classList.add("message", sender);
-  msg.textContent = content;
-  chatBox.appendChild(msg);
-  chatBox.scrollTop = chatBox.scrollHeight;
-}
+// Speak first when page loads
+window.onload = () => {
+    speak("Hello! I'm your smart assistant. What do you want me to do?");
+};
 
-// Send message to backend
-async function sendMessage() {
-  const message = userInput.value.trim();
-  if (!message) return;
+// Start voice recognition
+micBtn.addEventListener("click", () => {
+    let recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.lang = "en-US";
+    recognition.start();
 
-  addMessage(message, "user");
-  userInput.value = "";
+    recognition.onresult = async (event) => {
+        const userText = event.results[0][0].transcript;
 
-  try {
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: message }),
-    });
+        // Show user message in chat
+        let userDiv = document.createElement("div");
+        userDiv.classList.add("user-message");
+        userDiv.textContent = userText;
+        chatBox.appendChild(userDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
 
-    const data = await response.json();
-    if (data.reply) {
-      addMessage(data.reply, "bot");
-      speakText(data.reply);
-    } else {
-      addMessage("Error: Could not get a response.", "bot");
-    }
-  } catch (error) {
-    addMessage("Error: " + error.message, "bot");
-  }
-}
+        // Send to backend
+        const response = await fetch("http://127.0.0.1:5000/voice", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ query: userText })
+        });
 
-// Convert AI response to speech
-function speakText(text) {
-  const synth = window.speechSynthesis;
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = "en-US";
-  synth.speak(utterance);
-}
+        const data = await response.json();
+        const botReply = data.reply;
 
-// Voice input (speech-to-text)
-voiceBtn.addEventListener("click", () => {
-  const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-  recognition.lang = "en-US";
-  recognition.start();
+        // Show bot message
+        let botDiv = document.createElement("div");
+        botDiv.classList.add("bot-message");
+        botDiv.textContent = botReply;
+        chatBox.appendChild(botDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
 
-  recognition.onresult = (event) => {
-    const voiceText = event.results[0][0].transcript;
-    userInput.value = voiceText;
-    sendMessage();
-  };
-
-  recognition.onerror = () => {
-    addMessage("Voice recognition failed. Try again.", "bot");
-  };
-});
-
-// Event listeners
-sendBtn.addEventListener("click", sendMessage);
-userInput.addEventListener("keypress", (e) => {
-  if (e.key === "Enter") sendMessage();
+        // Speak response
+        speak(botReply);
+    };
 });
