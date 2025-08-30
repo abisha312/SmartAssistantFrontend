@@ -1,41 +1,73 @@
 const sendBtn = document.getElementById("send-btn");
+const voiceBtn = document.getElementById("voice-btn");
 const userInput = document.getElementById("user-input");
 const chatBox = document.getElementById("chat-box");
 
-// Replace with your Render backend URL
-const API_URL = "https://smartassistant-6zzm.onrender.com/api/ask";
+const API_URL = "https://<your-render-backend-url>/api/ask"; // Replace with your Flask backend URL
 
-sendBtn.addEventListener("click", async () => {
-    const prompt = userInput.value.trim();
-    if (!prompt) return;
+// Add message to chat box
+function addMessage(content, sender) {
+  const msg = document.createElement("div");
+  msg.classList.add("message", sender);
+  msg.textContent = content;
+  chatBox.appendChild(msg);
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
 
-    // Show user's message in the chat box
-    chatBox.innerHTML += `<div class="user-msg">You: ${prompt}</div>`;
-    userInput.value = "";
+// Send message to backend
+async function sendMessage() {
+  const message = userInput.value.trim();
+  if (!message) return;
 
-    try {
-        // Send request to deployed backend
-        const res = await fetch(API_URL, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ prompt }),
-        });
+  addMessage(message, "user");
+  userInput.value = "";
 
-        const data = await res.json();
+  try {
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: message }),
+    });
 
-        // Show AI's response or handle errors
-        if (data.reply) {
-            chatBox.innerHTML += `<div class="bot-msg">AI: ${data.reply}</div>`;
-        } else {
-            chatBox.innerHTML += `<div class="bot-msg error">Error: ${data.error || "Something went wrong"}</div>`;
-        }
-
-        // Auto-scroll to the latest message
-        chatBox.scrollTop = chatBox.scrollHeight;
-
-    } catch (err) {
-        chatBox.innerHTML += `<div class="bot-msg error">Network Error: ${err.message}</div>`;
+    const data = await response.json();
+    if (data.reply) {
+      addMessage(data.reply, "bot");
+      speakText(data.reply);
+    } else {
+      addMessage("Error: Could not get a response.", "bot");
     }
+  } catch (error) {
+    addMessage("Error: " + error.message, "bot");
+  }
+}
+
+// Convert AI response to speech
+function speakText(text) {
+  const synth = window.speechSynthesis;
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "en-US";
+  synth.speak(utterance);
+}
+
+// Voice input (speech-to-text)
+voiceBtn.addEventListener("click", () => {
+  const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  recognition.lang = "en-US";
+  recognition.start();
+
+  recognition.onresult = (event) => {
+    const voiceText = event.results[0][0].transcript;
+    userInput.value = voiceText;
+    sendMessage();
+  };
+
+  recognition.onerror = () => {
+    addMessage("Voice recognition failed. Try again.", "bot");
+  };
+});
+
+// Event listeners
+sendBtn.addEventListener("click", sendMessage);
+userInput.addEventListener("keypress", (e) => {
+  if (e.key === "Enter") sendMessage();
 });
